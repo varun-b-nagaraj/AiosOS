@@ -39,13 +39,7 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE);
 
-    const body = (await req.json()) as any;
-    if (!body?.mode) {
-      return new Response(JSON.stringify({ error: "Missing mode in request body", build_marker: BUILD_MARKER }), {
-        status: 400,
-        headers: JSON_HEADERS,
-      });
-    }
+    const body = ((await req.json().catch(() => ({}))) ?? {}) as any;
 
     const ctx: Ctx = {
       supabase,
@@ -79,14 +73,16 @@ serve(async (req) => {
         return wantsStream
           ? await handleRegenerateStepStream(ctx, body)
           : await handleRegenerateStep(ctx, body);
+
       case "apply_plan":
-      return wantsStream
-        ? await handleApplyPlanStream(ctx, body)
-        : await handleApplyPlan(ctx, body);
+        return wantsStream ? await handleApplyPlanStream(ctx, body) : await handleApplyPlan(ctx, body);
 
       default:
         return new Response(
-          JSON.stringify({ error: "Unknown mode. Use 'generate_plan' | 'deep_dive' | 'regenerate_step'", build_marker: BUILD_MARKER }),
+          JSON.stringify({
+            error: "Unknown mode. Use 'generate_plan' | 'deep_dive' | 'regenerate_step' | 'apply_plan'",
+            build_marker: BUILD_MARKER,
+          }),
           { status: 400, headers: JSON_HEADERS },
         );
     }
