@@ -294,10 +294,10 @@ function stepPrompt(input: {
   short_description: string;
   long_description?: string | null;
   step_key: string;
-  step.title: string;
+  title: string;
   step_count: number;
 }) {
-  const { company_name, company_title, short_description, long_description, step_key, step.title, step_count } = input;
+  const { company_name, company_title, short_description, long_description, step_key, title, step_count } = input;
 
   return `Return ONLY valid MINIFIED JSON on one line.
 
@@ -306,11 +306,11 @@ You must fill VALUES for details/success_criteria/priority/estimated_minutes onl
 DO NOT change step_key or title. Copy them EXACTLY.
 
 JSON TEMPLATE (copy exactly, only replace the ... and NN values):
-{"step_key":"${step_key}","title":"${step.title}","priority":"medium","details":"...","success_criteria":"...","estimated_minutes":NN}
+{"step_key":"${step_key}","title":"${title}","priority":"medium","details":"...","success_criteria":"...","estimated_minutes":NN}
 
 Rules:
 - step_key MUST be exactly "${step_key}" (no other text).
-- title MUST be exactly "${step.title}" (no other text).
+- title MUST be exactly "${title}" (no other text).
 - details: one sentence, <= 90 chars.
 - success_criteria: one sentence, <= 80 chars.
 - priority: low|medium|high.
@@ -509,7 +509,7 @@ serve(async (req) => {
             short_description,
             long_description,
             step_key: s.step_key,
-            step.title: s.title,
+            title: s.title,
             step_count: outline.step_count,
           }),
           num_predict: 260, // still small
