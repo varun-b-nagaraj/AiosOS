@@ -1,8 +1,9 @@
 // supabase/functions/ai-generate-plan/shared.ts
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
-export type GeneratePlanBody = {
+type GeneratePlanBody = {
   mode: "generate_plan";
+  stream?: boolean;          // <— add
   person_name?: string;
   user_id?: string;
   company_name: string;
@@ -11,11 +12,22 @@ export type GeneratePlanBody = {
   long_description?: string | null;
 };
 
-export type DeepDiveBody = {
+type DeepDiveBody = {
   mode: "deep_dive";
+  stream?: boolean;          // <— add
   plan_id: string;
   step_key: string;
 };
+
+type RegenerateStepBody = {
+  mode: "regenerate_step";
+  stream?: boolean;          // <— add
+  plan_id: string;
+  step_key: string;
+  user_feedback?: string;
+  constraints?: Record<string, unknown>;
+};
+
 export type DeepDiveStreamBody = Omit<DeepDiveBody, "mode"> & { mode: "deep_dive_stream" };
 
 export type Body =

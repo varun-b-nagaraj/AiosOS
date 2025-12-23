@@ -4,6 +4,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 import type { Body, Ctx } from "./shared.ts";
 import { handleGeneratePlan, handleGeneratePlanStream } from "./generate_plan.ts";
 import { handleDeepDive, handleDeepDiveStream } from "./deep_dive.ts";
+import { handleRegenerateStep, handleRegenerateStepStream } from "./regenerate_step.ts";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 const DEV_USER_ID = "00000000-0000-0000-0000-000000000000";
@@ -37,7 +38,7 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SERVICE_ROLE);
 
-    const body = (await req.json()) as Body;
+    const body = (await req.json()) as any;
     if (!body?.mode) {
       return new Response(JSON.stringify({ error: "Missing mode in request body", build_marker: BUILD_MARKER }), {
         status: 400,
@@ -60,21 +61,27 @@ serve(async (req) => {
       },
     };
 
+    const wantsStream = body.stream !== false; // default true
+
     switch (body.mode) {
       case "generate_plan":
-        return await handleGeneratePlan(ctx, body);
-
-      case "generate_plan_stream":
-        return await handleGeneratePlanStream(ctx, body);
+        return wantsStream
+          ? await handleGeneratePlanStream(ctx, { ...body, mode: "generate_plan_stream" })
+          : await handleGeneratePlan(ctx, body);
 
       case "deep_dive":
-        return await handleDeepDive(ctx, body);
-      case "deep_dive_stream":
-        return await handleDeepDiveStream(ctx, body);
+        return wantsStream
+          ? await handleDeepDiveStream(ctx, { ...body, mode: "deep_dive_stream" })
+          : await handleDeepDive(ctx, body);
+
+      case "regenerate_step":
+        return wantsStream
+          ? await handleRegenerateStepStream(ctx, body)
+          : await handleRegenerateStep(ctx, body);
 
       default:
         return new Response(
-          JSON.stringify({ error: "Unknown mode. Use 'generate_plan' | 'generate_plan_stream' | 'deep_dive'", build_marker: BUILD_MARKER }),
+          JSON.stringify({ error: "Unknown mode. Use 'generate_plan' | 'deep_dive' | 'regenerate_step'", build_marker: BUILD_MARKER }),
           { status: 400, headers: JSON_HEADERS },
         );
     }
