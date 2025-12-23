@@ -5,6 +5,7 @@ import type { Body, Ctx } from "./shared.ts";
 import { handleGeneratePlan, handleGeneratePlanStream } from "./generate_plan.ts";
 import { handleDeepDive, handleDeepDiveStream } from "./deep_dive.ts";
 import { handleRegenerateStep, handleRegenerateStepStream } from "./regenerate_step.ts";
+import { handleApplyPlan, handleApplyPlanStream } from "./apply_plan.ts";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 const DEV_USER_ID = "00000000-0000-0000-0000-000000000000";
@@ -78,6 +79,10 @@ serve(async (req) => {
         return wantsStream
           ? await handleRegenerateStepStream(ctx, body)
           : await handleRegenerateStep(ctx, body);
+      case "apply_plan":
+      return wantsStream
+        ? await handleApplyPlanStream(ctx, body)
+        : await handleApplyPlan(ctx, body);
 
       default:
         return new Response(
