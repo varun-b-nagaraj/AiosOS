@@ -1,190 +1,999 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>AI Generate Plan / Deep Dive Stream Test</title>
-  <style>
-    body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-      background: #0f172a;
-      color: #e5e7eb;
-      margin: 0;
-      padding: 20px;
-    }
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Atomic CRM — AI Plan Console</title>
 
-    h1 {
-      font-size: 20px;
-      margin-bottom: 10px;
-    }
+    <!-- Tailwind (CDN) -->
+    <script src="https://cdn.tailwindcss.com"></script>
 
-    textarea, input {
-      width: 100%;
-      padding: 10px;
-      margin-bottom: 10px;
-      background: #020617;
-      color: #e5e7eb;
-      border: 1px solid #334155;
-      border-radius: 6px;
-      font-family: monospace;
-    }
+<style>
+  /* App polish without Tailwind @apply (works with CDN) */
+  .muted { color: rgb(100 116 139); }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
 
-    button {
-      padding: 10px 14px;
-      background: #2563eb;
-      color: white;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      margin-right: 8px;
-    }
-
-    button.secondary {
-      background: #475569;
-    }
-
-    pre {
-      background: #020617;
-      border: 1px solid #334155;
-      padding: 12px;
-      border-radius: 6px;
-      height: 300px;
-      overflow: auto;
-      white-space: pre-wrap;
-      font-size: 13px;
-    }
-
-    .row {
-      display: flex;
-      gap: 10px;
-    }
-  </style>
-</head>
-<body>
-
-<h1>AI Generate Plan / Deep Dive Stream Tester</h1>
-
-<label>User ID</label>
-<input id="userId" value="3795457e-b828-4f2d-807d-f9584c680b44" />
-
-<label>Company Name</label>
-<input id="companyName" value="TestCo" />
-
-<label>Company Title</label>
-<input id="companyTitle" value="Founder" />
-
-<label>Short Description</label>
-<textarea id="shortDescription">A CRM add-on that auto-triages inbound email into contacts, tasks, and notes.</textarea>
-
-<div class="row">
-  <button onclick="runGeneratePlan()">Generate Plan (Stream)</button>
-  <button class="secondary" onclick="clearOutput()">Clear</button>
-</div>
-
-<hr style="margin:20px 0; border-color:#334155" />
-
-<label>Plan ID (for Deep Dive)</label>
-<input id="planId" placeholder="Paste plan_id here" />
-
-<label>Step Key</label>
-<input id="stepKey" value="step_1" />
-
-<div class="row">
-  <button onclick="runDeepDive()">Deep Dive (Stream)</button>
-</div>
-
-<h3>Stream Output</h3>
-<pre id="output"></pre>
-
-<script>
-const ENDPOINT = "http://127.0.0.1:54321/functions/v1/ai-generate-plan";
-
-function clearOutput() {
-  document.getElementById("output").textContent = "";
-}
-
-function append(text) {
-  const out = document.getElementById("output");
-  out.textContent += text;
-  out.scrollTop = out.scrollHeight;
-}
-
-async function streamRequest(payload) {
-  const res = await fetch(ENDPOINT, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-
-  if (!res.ok || !res.body) {
-    append(`\nERROR: HTTP ${res.status}\n`);
-    return;
+  .card {
+    border-radius: 16px;
+    border: 1px solid rgb(226 232 240);
+    background: white;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
   }
 
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
+  .scrollbar::-webkit-scrollbar { width: 10px; height: 10px; }
+  .scrollbar::-webkit-scrollbar-thumb {
+    background: rgb(203 213 225);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  .scrollbar::-webkit-scrollbar-track { background: transparent; }
 
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
+  .kbd {
+    border-radius: 8px;
+    border: 1px solid rgb(226 232 240);
+    background: rgb(248 250 252);
+    padding: 2px 6px;
+    font-size: 12px;
+    color: rgb(51 65 85);
+  }
 
-    buffer += decoder.decode(value, { stream: true });
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    border: 1px solid rgb(226 232 240);
+    background: rgb(248 250 252);
+    padding: 6px 10px;
+    font-size: 12px;
+    color: rgb(51 65 85);
+  }
 
-    let idx;
-    while ((idx = buffer.indexOf("\n\n")) !== -1) {
-      const frame = buffer.slice(0, idx);
-      buffer = buffer.slice(idx + 2);
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border-radius: 12px;
+    padding: 8px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    transition: background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
+  }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-      let event = "message";
-      let data = "";
+  .btn-primary {
+    background: rgb(15 23 42);
+    color: white;
+  }
+  .btn-primary:hover { background: rgb(30 41 59); }
 
-      for (const line of frame.split("\n")) {
-        if (line.startsWith("event:")) event = line.slice(6).trim();
-        if (line.startsWith("data:")) data += line.slice(5).trim();
-      }
+  .btn-secondary {
+    border: 1px solid rgb(226 232 240);
+    background: white;
+    color: rgb(30 41 59);
+  }
+  .btn-secondary:hover { background: rgb(248 250 252); }
 
-      if (!data) continue;
+  .tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 12px;
+    padding: 8px 12px;
+    font-size: 14px;
+    font-weight: 600;
+    transition: background-color 150ms ease, border-color 150ms ease;
+  }
+  .tab-active { background: rgb(15 23 42); color: white; }
+  .tab-inactive {
+    background: white;
+    color: rgb(51 65 85);
+    border: 1px solid rgb(226 232 240);
+  }
+  .tab-inactive:hover { background: rgb(248 250 252); }
 
-      const parsed = JSON.parse(data);
+  .input {
+    width: 100%;
+    border-radius: 12px;
+    border: 1px solid rgb(226 232 240);
+    background: white;
+    padding: 8px 12px;
+    font-size: 14px;
+    color: rgb(15 23 42);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    outline: none;
+  }
+  .input:focus { box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.6); }
 
-      if (event === "token") {
-        append(parsed.delta ?? "");
-      } else if (event === "status") {
-        append(`\n\n[STATUS] ${JSON.stringify(parsed)}\n`);
-        if (parsed.plan_id) {
-          document.getElementById("planId").value = parsed.plan_id;
+  .textarea { min-height: 110px; }
+
+  .label { font-size: 14px; font-weight: 600; color: rgb(51 65 85); }
+  .help { font-size: 12px; color: rgb(100 116 139); }
+
+  .divider { height: 1px; background: rgb(226 232 240); }
+
+  .pill {
+    border-radius: 12px;
+    border: 1px solid rgb(226 232 240);
+    background: rgb(248 250 252);
+    padding: 8px 12px;
+    font-size: 14px;
+    color: rgb(51 65 85);
+  }
+
+  .toast {
+    position: fixed;
+    bottom: 16px;
+    right: 16px;
+    z-index: 50;
+    max-width: 420px;
+    border-radius: 16px;
+    border: 1px solid rgb(226 232 240);
+    background: white;
+    padding: 16px;
+    box-shadow: 0 10px 25px rgba(15, 23, 42, 0.12);
+  }
+
+  .json { white-space: pre-wrap; word-break: break-word; }
+</style>
+
+  </head>
+
+  <body class="bg-slate-50 text-slate-900">
+    <div class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+      <!-- Header -->
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <div class="flex items-center gap-2">
+            <div class="h-9 w-9 rounded-2xl bg-slate-900"></div>
+            <div>
+              <h1 class="text-xl font-semibold">AI Plan Console</h1>
+              <p class="muted text-sm">
+                A publishable, user-friendly test UI for your Supabase Edge Function:
+                <span class="mono">ai-generate-plan</span>
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <span class="badge" title="Streaming uses SSE. If disabled, requests return JSON.">
+            <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+            SSE Ready
+          </span>
+          <button id="btnReset" class="btn-secondary" type="button">Reset</button>
+        </div>
+      </div>
+
+      <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-12">
+        <!-- Left: Settings + Tabs -->
+        <div class="lg:col-span-4">
+          <div class="card p-5">
+            <h2 class="text-base font-semibold">Connection</h2>
+            <p class="help mt-1">
+              Set your function URL + optional auth headers. Tip: press <span class="kbd">⌘</span><span class="kbd">Enter</span> to run.
+            </p>
+
+            <div class="mt-4 space-y-3">
+              <div>
+                <label class="label">Function URL</label>
+                <input
+                  id="functionUrl"
+                  class="input mono"
+                  placeholder="http://127.0.0.1:54321/functions/v1/ai-generate-plan"
+                  spellcheck="false"
+                />
+                <p class="help mt-1">
+                  Local example:
+                  <span class="mono">http://127.0.0.1:54321/functions/v1/ai-generate-plan</span>
+                </p>
+              </div>
+
+              <div>
+                <label class="label">Anon Key (optional)</label>
+                <input
+                  id="anonKey"
+                  class="input mono"
+                  placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+                  spellcheck="false"
+                />
+                <p class="help mt-1">
+                  If your function requires JWT verification, set this. We send:
+                  <span class="mono">Authorization: Bearer &lt;anon&gt;</span> and <span class="mono">apikey</span>.
+                </p>
+              </div>
+
+              <div class="grid grid-cols-2 gap-3">
+                <div class="pill">
+                  <div class="text-xs font-semibold text-slate-700">Mode</div>
+                  <div id="activeMode" class="mono text-sm">generate_plan</div>
+                </div>
+                <div class="pill">
+                  <div class="text-xs font-semibold text-slate-700">Transport</div>
+                  <div class="text-sm">
+                    <label class="inline-flex cursor-pointer items-center gap-2">
+                      <input id="toggleStream" type="checkbox" class="h-4 w-4" checked />
+                      <span id="streamLabel" class="font-medium">Streaming (SSE)</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div class="divider"></div>
+
+              <h3 class="text-sm font-semibold text-slate-800">Endpoints</h3>
+              <div class="flex flex-wrap gap-2">
+                <button class="tab tab-active" data-tab="generate_plan" type="button">Generate Plan</button>
+                <button class="tab tab-inactive" data-tab="deep_dive" type="button">Deep Dive</button>
+                <button class="tab tab-inactive" data-tab="regenerate_step" type="button">Regenerate Step</button>
+                <button class="tab tab-inactive" data-tab="apply_plan" type="button">Apply Plan</button>
+              </div>
+
+              <p class="help">
+                All of these call the same function with different JSON bodies (your router dispatches by <span class="mono">mode</span>).
+              </p>
+            </div>
+          </div>
+
+          <div class="card mt-6 p-5">
+            <h2 class="text-base font-semibold">Quick Actions</h2>
+            <div class="mt-3 grid grid-cols-2 gap-3">
+              <button id="btnCopyCurl" class="btn-secondary" type="button">Copy cURL</button>
+              <button id="btnClearOutput" class="btn-secondary" type="button">Clear Output</button>
+            </div>
+            <p class="help mt-2">
+              “Copy cURL” mirrors the current tab’s payload, including <span class="mono">stream</span>.
+            </p>
+          </div>
+        </div>
+
+        <!-- Right: Forms + Output -->
+        <div class="lg:col-span-8">
+          <!-- Forms -->
+          <div class="card p-5">
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <h2 id="formTitle" class="text-base font-semibold">Generate Plan</h2>
+                <p id="formSubtitle" class="help mt-1">
+                  Create a new plan + outline steps. Best used at “signup” after onboarding context.
+                </p>
+              </div>
+              <div class="flex items-center gap-2">
+                <button id="btnRun" class="btn-primary" type="button">Run</button>
+                <button id="btnStop" class="btn-secondary" type="button" disabled>Stop</button>
+              </div>
+            </div>
+
+            <!-- generate_plan -->
+            <form id="form-generate_plan" class="mt-5 space-y-4">
+              <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label class="label">Company Name</label>
+                  <input id="gp_company_name" class="input" placeholder="Atomic CRM" />
+                </div>
+                <div>
+                  <label class="label">Your Title</label>
+                  <input id="gp_company_title" class="input" placeholder="Founder" />
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label class="label">Person Name (optional)</label>
+                  <input id="gp_person_name" class="input" placeholder="Varun" />
+                </div>
+                <div>
+                  <label class="label">User ID (optional)</label>
+                  <input id="gp_user_id" class="input mono" placeholder="3795457e-b828-4f2d-..." spellcheck="false" />
+                  <p class="help mt-1">If omitted, your function may use its dev fallback.</p>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <div class="flex flex-col">
+                  <label class="label">Short Description</label>
+                  <p class="help mb-2">What does the business do in 1–2 sentences?</p>
+                  <textarea
+                    id="gp_short_description"
+                    class="textarea flex-1"
+                    placeholder="E.g., A CRM platform for managing customer relationships"
+                    maxlength="200"
+                  ></textarea>
+                  <div class="mt-2 text-xs text-slate-500">
+                    <span id="gp_short_count">0</span>/200
+                  </div>
+                </div>
+
+                <div class="flex flex-col">
+                  <label class="label">Long Description (optional)</label>
+                  <p class="help mb-2">Deeper context, onboarding goals, constraints</p>
+                  <textarea
+                    id="gp_long_description"
+                    class="textarea flex-1"
+                    placeholder="Paste onboarding_profile summary, budget constraints, team size, key pain points..."
+                    maxlength="800"
+                  ></textarea>
+                  <div class="mt-2 text-xs text-slate-500">
+                    <span id="gp_long_count">0</span>/800
+                  </div>
+                </div>
+              </div>
+
+              <details class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <summary class="cursor-pointer text-sm font-semibold text-slate-700">Advanced</summary>
+                <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div>
+                    <label class="label">Stream</label>
+                    <input id="gp_stream" class="input" value="(uses global toggle)" disabled />
+                  </div>
+                  <div>
+                    <label class="label">Mode</label>
+                    <input class="input mono" value="generate_plan" disabled />
+                  </div>
+                </div>
+              </details>
+            </form>
+
+            <!-- deep_dive -->
+            <form id="form-deep_dive" class="mt-5 hidden space-y-4">
+              <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label class="label">Plan ID</label>
+                  <input id="dd_plan_id" class="input mono" placeholder="9fd323e2-25f7-4dbe-b281-..." spellcheck="false" />
+                </div>
+                <div>
+                  <label class="label">Step Key</label>
+                  <input id="dd_step_key" class="input mono" placeholder="step_03_validate_demand" spellcheck="false" />
+                </div>
+              </div>
+
+              <p class="help">
+                This should return a detailed “how to do it” expansion for a given plan step (and/or persist it, depending on your handler).
+              </p>
+            </form>
+
+            <!-- regenerate_step -->
+            <form id="form-regenerate_step" class="mt-5 hidden space-y-4">
+              <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label class="label">Plan ID</label>
+                  <input id="rs_plan_id" class="input mono" placeholder="9fd323e2-25f7-4dbe-b281-..." spellcheck="false" />
+                </div>
+                <div>
+                  <label class="label">Step Key</label>
+                  <input id="rs_step_key" class="input mono" placeholder="step_03_validate_demand" spellcheck="false" />
+                </div>
+              </div>
+
+              <div>
+                <label class="label">User Feedback (optional)</label>
+                <textarea
+                  id="rs_user_feedback"
+                  class="textarea"
+                  placeholder="E.g., 'Make it cheaper, I'm a solo founder. Focus on inbound + no paid ads.'"
+                ></textarea>
+              </div>
+
+              <div>
+                <label class="label">Constraints JSON (optional)</label>
+                <textarea
+                  id="rs_constraints"
+                  class="textarea mono"
+                  placeholder='{"budget_usd": 50, "time_hours_per_week": 5, "tools": ["supabase","postmark"]}'
+                  spellcheck="false"
+                ></textarea>
+                <p class="help mt-1">If invalid JSON, we’ll block submission and show a friendly error.</p>
+              </div>
+            </form>
+
+            <!-- apply_plan -->
+            <form id="form-apply_plan" class="mt-5 hidden space-y-4">
+              <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label class="label">Plan ID</label>
+                  <input id="ap_plan_id" class="input mono" placeholder="9fd323e2-25f7-4dbe-b281-..." spellcheck="false" />
+                </div>
+                <div>
+                  <label class="label">Company ID (optional)</label>
+                  <input id="ap_company_id" class="input mono" placeholder="company uuid" spellcheck="false" />
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label class="label">Owner User ID (optional)</label>
+                  <input id="ap_owner_user_id" class="input mono" placeholder="owner uuid" spellcheck="false" />
+                </div>
+                <div>
+                  <label class="label">Start Date (optional)</label>
+                  <input id="ap_start_date" class="input" placeholder="2025-12-23" />
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div>
+                  <label class="label">Cadence Days (optional)</label>
+                  <input id="ap_cadence_days" class="input" type="number" min="1" step="1" placeholder="2" />
+                </div>
+                <div>
+                  <label class="label">Project Key (optional)</label>
+                  <input id="ap_project_key" class="input mono" placeholder="onboarding_v1" spellcheck="false" />
+                </div>
+                <div class="flex items-end gap-2">
+                  <label class="inline-flex cursor-pointer items-center gap-2 pb-1 text-sm">
+                    <input id="ap_dry_run" type="checkbox" class="h-4 w-4" />
+                    <span class="font-medium text-slate-700">Dry run</span>
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label class="label">Labels (optional)</label>
+                <input id="ap_labels" class="input mono" placeholder='["ai-plan","onboarding"]' spellcheck="false" />
+                <p class="help mt-1">JSON array of strings.</p>
+              </div>
+
+              <p class="help">
+                Apply Plan usually means: take plan steps and schedule/create tasks in <span class="mono">public.tasks</span>
+                with cadence, labels, and ownership metadata.
+              </p>
+            </form>
+          </div>
+
+          <!-- Output -->
+          <div class="card mt-6 p-5">
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 class="text-base font-semibold">Output</h2>
+                <p class="help">
+                  Streaming shows <span class="mono">event:</span> + <span class="mono">data:</span> lines in real time.
+                </p>
+              </div>
+              <div class="flex items-center gap-2">
+                <span id="statusBadge" class="badge">
+                  <span class="h-2 w-2 rounded-full bg-slate-400"></span>
+                  Idle
+                </span>
+              </div>
+            </div>
+
+            <div class="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+              <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div class="flex items-center justify-between">
+                  <div class="text-sm font-semibold text-slate-700">Request</div>
+                  <button id="btnCopyJson" class="btn-secondary px-3 py-1.5 text-xs" type="button">Copy JSON</button>
+                </div>
+                <pre id="requestPreview" class="json mono mt-3 max-h-[320px] overflow-auto scrollbar text-xs text-slate-800"></pre>
+              </div>
+
+              <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div class="flex items-center justify-between">
+                  <div class="text-sm font-semibold text-slate-700">Response</div>
+                  <button id="btnCopyResponse" class="btn-secondary px-3 py-1.5 text-xs" type="button">Copy</button>
+                </div>
+                <pre id="responseOut" class="json mono mt-3 max-h-[320px] overflow-auto scrollbar text-xs text-slate-800"></pre>
+              </div>
+
+              <div class="lg:col-span-2 rounded-2xl border border-slate-200 bg-white p-4">
+                <div class="flex items-center justify-between">
+                  <div class="text-sm font-semibold text-slate-700">Streaming Log</div>
+                  <div class="flex items-center gap-2">
+                    <button id="btnCopyLog" class="btn-secondary px-3 py-1.5 text-xs" type="button">Copy Log</button>
+                    <button id="btnClearLog" class="btn-secondary px-3 py-1.5 text-xs" type="button">Clear</button>
+                  </div>
+                </div>
+                <div id="streamLog" class="mono mt-3 max-h-[260px] overflow-auto scrollbar rounded-xl bg-slate-50 p-3 text-xs text-slate-800"></div>
+              </div>
+            </div>
+          </div>
+
+          <p class="help mt-4">
+            Note: Your function router defaults to streaming unless <span class="mono">{"stream": false}</span>.
+            :contentReference[oaicite:0]{index=0}
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast -->
+    <div id="toast" class="toast hidden">
+      <div class="flex items-start justify-between gap-3">
+        <div>
+          <div id="toastTitle" class="text-sm font-semibold text-slate-900">Notice</div>
+          <div id="toastMsg" class="muted mt-1 text-sm"></div>
+        </div>
+        <button id="toastClose" class="btn-secondary px-3 py-1.5 text-xs" type="button">Close</button>
+      </div>
+    </div>
+
+    <script>
+      // -----------------------------
+      // Small utilities
+      // -----------------------------
+      const $ = (id) => document.getElementById(id);
+
+      function pretty(obj) {
+        try {
+          return JSON.stringify(obj, null, 2);
+        } catch {
+          return String(obj);
         }
-      } else if (event === "done") {
-        append(`\n\n[DONE]\n${JSON.stringify(parsed, null, 2)}\n`);
-      } else if (event === "error") {
-        append(`\n\n[ERROR]\n${JSON.stringify(parsed, null, 2)}\n`);
       }
-    }
-  }
-}
 
-function runGeneratePlan() {
-  clearOutput();
+      function nowTime() {
+        const d = new Date();
+        return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      }
 
-  streamRequest({
-    mode: "generate_plan_stream",
-    user_id: document.getElementById("userId").value.trim(),
-    company_name: document.getElementById("companyName").value.trim(),
-    company_title: document.getElementById("companyTitle").value.trim(),
-    short_description: document.getElementById("shortDescription").value.trim(),
-  });
-}
+      async function copyToClipboard(text) {
+        await navigator.clipboard.writeText(text);
+        toast("Copied", "Copied to clipboard.");
+      }
 
-function runDeepDive() {
-  clearOutput();
+      function toast(title, msg) {
+        $("toastTitle").textContent = title;
+        $("toastMsg").textContent = msg;
+        $("toast").classList.remove("hidden");
+      }
 
-  streamRequest({
-    mode: "deep_dive_stream",
-    plan_id: document.getElementById("planId").value.trim(),
-    step_key: document.getElementById("stepKey").value.trim(),
-  });
-}
-</script>
+      $("toastClose").addEventListener("click", () => $("toast").classList.add("hidden"));
 
-</body>
+      function setStatus(label, color /* slate|emerald|red|amber */) {
+        const badge = $("statusBadge");
+        badge.innerHTML = `<span class="h-2 w-2 rounded-full bg-${color}-500"></span>${label}`;
+      }
+
+      function clearOutput() {
+        $("responseOut").textContent = "";
+        $("streamLog").textContent = "";
+      }
+
+      function logLine(line) {
+        const el = $("streamLog");
+        el.textContent += line + "\n";
+        el.scrollTop = el.scrollHeight;
+      }
+
+      // -----------------------------
+      // State
+      // -----------------------------
+      const state = {
+        activeTab: "generate_plan",
+        abortController: null,
+        lastRequest: null,
+        lastResponseText: "",
+      };
+
+      // -----------------------------
+      // Tabs
+      // -----------------------------
+      const tabButtons = Array.from(document.querySelectorAll("button[data-tab]"));
+      const forms = {
+        generate_plan: $("form-generate_plan"),
+        deep_dive: $("form-deep_dive"),
+        regenerate_step: $("form-regenerate_step"),
+        apply_plan: $("form-apply_plan"),
+      };
+
+      const tabMeta = {
+        generate_plan: {
+          title: "Generate Plan",
+          subtitle: "Create a new plan + outline steps. Best used right after onboarding.",
+        },
+        deep_dive: {
+          title: "Deep Dive",
+          subtitle: "Expand a single plan step into actionable, step-by-step guidance.",
+        },
+        regenerate_step: {
+          title: "Regenerate Step",
+          subtitle: "Rewrite a step based on user feedback and constraints, keeping it aligned to the plan.",
+        },
+        apply_plan: {
+          title: "Apply Plan",
+          subtitle: "Schedule/create tasks from plan steps into your tasks table (optionally dry-run).",
+        },
+      };
+
+      function setTab(tab) {
+        state.activeTab = tab;
+
+        // Update tab buttons
+        tabButtons.forEach((b) => {
+          const isActive = b.dataset.tab === tab;
+          b.className = isActive ? "tab tab-active" : "tab tab-inactive";
+        });
+
+        // Show only active form
+        Object.entries(forms).forEach(([k, el]) => {
+          el.classList.toggle("hidden", k !== tab);
+        });
+
+        // Titles + labels
+        $("formTitle").textContent = tabMeta[tab].title;
+        $("formSubtitle").textContent = tabMeta[tab].subtitle;
+        $("activeMode").textContent = tab;
+
+        // Refresh request preview
+        renderRequestPreview();
+      }
+
+      tabButtons.forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
+
+      // -----------------------------
+      // Build payloads
+      // -----------------------------
+      function parseJsonOptional(text, label) {
+        const trimmed = (text || "").trim();
+        if (!trimmed) return undefined;
+        try {
+          return JSON.parse(trimmed);
+        } catch (e) {
+          throw new Error(`${label} must be valid JSON.`);
+        }
+      }
+
+      function getStreamEnabled() {
+        return $("toggleStream").checked;
+      }
+
+      function buildPayload() {
+        const stream = getStreamEnabled();
+
+        if (state.activeTab === "generate_plan") {
+          return {
+            mode: "generate_plan",
+            stream,
+            company_name: $("gp_company_name").value.trim(),
+            company_title: $("gp_company_title").value.trim(),
+            short_description: $("gp_short_description").value.trim(),
+            person_name: $("gp_person_name").value.trim() || undefined,
+            user_id: $("gp_user_id").value.trim() || undefined,
+            long_description: $("gp_long_description").value.trim() || undefined,
+          };
+        }
+
+        if (state.activeTab === "deep_dive") {
+          return {
+            mode: "deep_dive",
+            stream,
+            plan_id: $("dd_plan_id").value.trim(),
+            step_key: $("dd_step_key").value.trim(),
+          };
+        }
+
+        if (state.activeTab === "regenerate_step") {
+          const constraints = parseJsonOptional($("rs_constraints").value, "Constraints JSON");
+          return {
+            mode: "regenerate_step",
+            stream,
+            plan_id: $("rs_plan_id").value.trim(),
+            step_key: $("rs_step_key").value.trim(),
+            user_feedback: $("rs_user_feedback").value.trim() || undefined,
+            constraints,
+          };
+        }
+
+        if (state.activeTab === "apply_plan") {
+          const labels = parseJsonOptional($("ap_labels").value, "Labels") ?? undefined;
+          const cadenceDaysRaw = $("ap_cadence_days").value.trim();
+          const cadence_days = cadenceDaysRaw ? Number(cadenceDaysRaw) : undefined;
+
+          return {
+            mode: "apply_plan",
+            stream,
+            plan_id: $("ap_plan_id").value.trim(),
+            company_id: $("ap_company_id").value.trim() || undefined,
+            owner_user_id: $("ap_owner_user_id").value.trim() || undefined,
+            start_date: $("ap_start_date").value.trim() || undefined,
+            cadence_days: Number.isFinite(cadence_days) ? cadence_days : undefined,
+            project_key: $("ap_project_key").value.trim() || undefined,
+            labels,
+            dry_run: $("ap_dry_run").checked || undefined,
+          };
+        }
+
+        throw new Error("Unknown tab");
+      }
+
+      function renderRequestPreview() {
+        try {
+          const payload = buildPayload();
+          state.lastRequest = payload;
+          $("requestPreview").textContent = pretty(payload);
+        } catch (e) {
+          $("requestPreview").textContent = String(e.message || e);
+        }
+      }
+
+      // Character count tracking
+      $("gp_short_description").addEventListener("input", (e) => {
+        $("gp_short_count").textContent = e.target.value.length;
+      });
+
+      $("gp_long_description").addEventListener("input", (e) => {
+        $("gp_long_count").textContent = e.target.value.length;
+      });
+
+      // Render preview whenever inputs change
+      document.addEventListener("input", (e) => {
+        // ignore inputs disabled
+        if (e.target && e.target.closest("form")) renderRequestPreview();
+        if (e.target && e.target.id === "toggleStream") {
+          $("streamLabel").textContent = $("toggleStream").checked ? "Streaming (SSE)" : "JSON (non-stream)";
+          renderRequestPreview();
+        }
+      });
+
+      // -----------------------------
+      // Request execution
+      // -----------------------------
+      function buildHeaders() {
+        const headers = { "Content-Type": "application/json" };
+        const anon = $("anonKey").value.trim();
+        if (anon) {
+          headers["Authorization"] = `Bearer ${anon}`;
+          headers["apikey"] = anon;
+        }
+        return headers;
+      }
+
+      async function runNonStream(url, payload) {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: buildHeaders(),
+          body: JSON.stringify({ ...payload, stream: false }),
+          signal: state.abortController.signal,
+        });
+
+        const text = await res.text();
+        state.lastResponseText = text;
+
+        // Try JSON pretty; fallback raw
+        try {
+          const json = JSON.parse(text);
+          $("responseOut").textContent = pretty(json);
+        } catch {
+          $("responseOut").textContent = text;
+        }
+
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status} ${res.statusText}`);
+        }
+      }
+
+      async function runStream(url, payload) {
+        $("responseOut").textContent = "";
+        $("streamLog").textContent = "";
+        state.lastResponseText = "";
+
+        const res = await fetch(url, {
+          method: "POST",
+          headers: buildHeaders(),
+          body: JSON.stringify({ ...payload, stream: true }),
+          signal: state.abortController.signal,
+        });
+
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          state.lastResponseText = text;
+          $("responseOut").textContent = text || `HTTP ${res.status} ${res.statusText}`;
+          throw new Error(`HTTP ${res.status} ${res.statusText}`);
+        }
+
+        // SSE parsing: lines "event: x" and "data: {...}"
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let buffer = "";
+
+        let currentEvent = "";
+        let lastJson = null;
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+
+          const parts = buffer.split("\n");
+          buffer = parts.pop() || "";
+
+          for (const line of parts) {
+            const l = line.replace(/\r$/, "");
+            if (!l.trim()) continue;
+
+            if (l.startsWith("event:")) {
+              currentEvent = l.slice("event:".length).trim();
+              logLine(`[${nowTime()}] event: ${currentEvent}`);
+            } else if (l.startsWith("data:")) {
+              const dataStr = l.slice("data:".length).trim();
+              logLine(`[${nowTime()}] data: ${dataStr}`);
+              state.lastResponseText += dataStr + "\n";
+
+              // Try to parse JSON
+              try {
+                const obj = JSON.parse(dataStr);
+                lastJson = obj;
+
+                // If this is a status update, show a lightweight badge
+                if (currentEvent === "status" && obj && obj.phase) {
+                  setStatus(`Running • ${obj.phase}`, "amber");
+                }
+
+                // Always keep "Response" panel showing latest JSON we saw
+                $("responseOut").textContent = pretty(obj);
+              } catch {
+                // keep raw
+                $("responseOut").textContent = dataStr;
+              }
+            } else {
+              // unexpected SSE line
+              logLine(`[${nowTime()}] ${l}`);
+            }
+          }
+        }
+
+        // Final badge
+        setStatus("Done", "emerald");
+        if (lastJson) $("responseOut").textContent = pretty(lastJson);
+      }
+
+      async function run() {
+        const url = $("functionUrl").value.trim();
+        if (!url) {
+          toast("Missing URL", "Please set your Function URL.");
+          return;
+        }
+
+        let payload;
+        try {
+          payload = buildPayload();
+        } catch (e) {
+          toast("Invalid input", e.message || String(e));
+          return;
+        }
+
+        // Basic required field checks (UI-level only)
+        const required = [];
+        if (payload.mode === "generate_plan") {
+          if (!payload.company_name) required.push("Company Name");
+          if (!payload.company_title) required.push("Your Title");
+          if (!payload.short_description) required.push("Short Description");
+        } else if (payload.mode === "deep_dive" || payload.mode === "regenerate_step" || payload.mode === "apply_plan") {
+          if (!payload.plan_id) required.push("Plan ID");
+          if (payload.mode !== "apply_plan" && !payload.step_key) required.push("Step Key");
+        }
+
+        if (required.length) {
+          toast("Missing fields", `Please fill: ${required.join(", ")}`);
+          return;
+        }
+
+        $("btnRun").disabled = true;
+        $("btnStop").disabled = false;
+        setStatus("Running", "amber");
+
+        state.abortController = new AbortController();
+
+        try {
+          if (getStreamEnabled()) {
+            await runStream(url, payload);
+          } else {
+            await runNonStream(url, payload);
+            setStatus("Done", "emerald");
+          }
+        } catch (e) {
+          if (e.name === "AbortError") {
+            setStatus("Stopped", "red");
+            toast("Stopped", "Request was aborted.");
+          } else {
+            setStatus("Error", "red");
+            toast("Error", e.message || String(e));
+          }
+        } finally {
+          $("btnRun").disabled = false;
+          $("btnStop").disabled = true;
+          state.abortController = null;
+        }
+      }
+
+      function stop() {
+        if (state.abortController) state.abortController.abort();
+      }
+
+      // -----------------------------
+      // Copy cURL + Copy buttons
+      // -----------------------------
+      function buildCurl() {
+        const url = $("functionUrl").value.trim() || "http://127.0.0.1:54321/functions/v1/ai-generate-plan";
+        const payload = buildPayload();
+        const anon = $("anonKey").value.trim();
+
+        const headers = [`-H "Content-Type: application/json"`];
+        if (anon) {
+          headers.push(`-H "Authorization: Bearer ${anon}"`);
+          headers.push(`-H "apikey: ${anon}"`);
+        }
+
+        const body = JSON.stringify(payload, null, 2)
+          .replaceAll("\\", "\\\\")
+          .replaceAll("`", "\\`");
+
+        const isStream = getStreamEnabled();
+        // -N for streaming output
+        return `curl ${isStream ? "-N " : ""}-sS -X POST "${url}" \\\n  ${headers.join(" \\\n  ")} \\\n  -d '${body}'\n`;
+      }
+
+      // -----------------------------
+      // Wire up buttons + shortcuts
+      // -----------------------------
+      $("btnRun").addEventListener("click", run);
+      $("btnStop").addEventListener("click", stop);
+
+      $("btnReset").addEventListener("click", () => {
+        // keep URL/key; reset forms
+        $("gp_company_name").value = "Atomic CRM";
+        $("gp_company_title").value = "Founder";
+        $("gp_person_name").value = "";
+        $("gp_user_id").value = "";
+        $("gp_short_description").value = "A stateful business copilot built on Atomic CRM that turns ideas into executable plans and tasks.";
+        $("gp_long_description").value =
+          "Users describe their business. The copilot generates a plan with steps, deep dives on demand, and can apply steps into scheduled tasks with labels and cadence.";
+
+        $("dd_plan_id").value = "";
+        $("dd_step_key").value = "";
+
+        $("rs_plan_id").value = "";
+        $("rs_step_key").value = "";
+        $("rs_user_feedback").value = "";
+        $("rs_constraints").value = "";
+
+        $("ap_plan_id").value = "";
+        $("ap_company_id").value = "";
+        $("ap_owner_user_id").value = "";
+        $("ap_start_date").value = "";
+        $("ap_cadence_days").value = "2";
+        $("ap_project_key").value = "onboarding_v1";
+        $("ap_labels").value = '["ai-plan","onboarding"]';
+        $("ap_dry_run").checked = false;
+
+        clearOutput();
+        setStatus("Idle", "slate");
+        renderRequestPreview();
+      });
+
+      $("btnClearOutput").addEventListener("click", () => {
+        clearOutput();
+        setStatus("Idle", "slate");
+      });
+
+      $("btnClearLog").addEventListener("click", () => ($("streamLog").textContent = ""));
+
+      $("btnCopyCurl").addEventListener("click", async () => copyToClipboard(buildCurl()));
+      $("btnCopyJson").addEventListener("click", async () => copyToClipboard($("requestPreview").textContent || ""));
+      $("btnCopyResponse").addEventListener("click", async () => copyToClipboard($("responseOut").textContent || ""));
+      $("btnCopyLog").addEventListener("click", async () => copyToClipboard($("streamLog").textContent || ""));
+
+      // Cmd/Ctrl + Enter to run
+      document.addEventListener("keydown", (e) => {
+        const isMac = navigator.platform.toLowerCase().includes("mac");
+        const mod = isMac ? e.metaKey : e.ctrlKey;
+        if (mod && e.key === "Enter") {
+          e.preventDefault();
+          run();
+        }
+        if (e.key === "Escape") stop();
+      });
+
+      // Initialize defaults
+      $("functionUrl").value = "http://127.0.0.1:54321/functions/v1/ai-generate-plan";
+      $("toggleStream").checked = true;
+      $("streamLabel").textContent = "Streaming (SSE)";
+
+      $("btnReset").click();
+      setTab("generate_plan");
+      renderRequestPreview();
+    </script>
+  </body>
 </html>
