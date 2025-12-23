@@ -1,0 +1,552 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AIOSOS Prototype (2-Model)</title>
+  <style>
+    :root { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; }
+    body { margin: 0; background: #0b0d12; color: #e8edf5; }
+    header { padding: 16px 20px; border-bottom: 1px solid #1e2633; display: flex; gap: 12px; align-items: center; }
+    header h1 { margin: 0; font-size: 16px; font-weight: 600; }
+    header .pill { font-size: 12px; padding: 6px 10px; border: 1px solid #2a3547; border-radius: 999px; color: #b8c3d6; }
+    main { display: grid; grid-template-columns: 360px 1fr; min-height: calc(100vh - 58px); }
+    aside { border-right: 1px solid #1e2633; padding: 16px; }
+    section { padding: 16px; }
+    .card { border: 1px solid #1e2633; border-radius: 12px; padding: 12px; background: #0f131b; }
+    .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    label { font-size: 12px; color: #b8c3d6; display: block; margin-bottom: 6px; }
+    input, textarea, select {
+      width: 100%; box-sizing: border-box; padding: 10px 10px;
+      border-radius: 10px; border: 1px solid #2a3547; background: #0b0d12; color: #e8edf5;
+      outline: none;
+    }
+    textarea { min-height: 72px; resize: vertical; }
+    button {
+      padding: 10px 12px; border-radius: 10px; border: 1px solid #2a3547;
+      background: #141a24; color: #e8edf5; cursor: pointer; font-weight: 600;
+    }
+    button:disabled { opacity: 0.55; cursor: not-allowed; }
+    .muted { color: #9aa7bd; font-size: 12px; }
+    .list { margin-top: 12px; display: grid; gap: 10px; }
+    .item {
+      display: grid; grid-template-columns: 22px 1fr auto;
+      gap: 10px; align-items: start;
+      padding: 10px; border-radius: 12px;
+      border: 1px solid #1e2633; background: #0b0d12;
+      cursor: pointer;
+    }
+    .item.active { border-color: #4b78ff; }
+    .badge { font-size: 11px; padding: 4px 8px; border-radius: 999px; border: 1px solid #2a3547; color: #b8c3d6; }
+    .badge.high { border-color: #ff5c5c55; color: #ffb0b0; }
+    .badge.medium { border-color: #ffd45c55; color: #ffe4a1; }
+    .badge.low { border-color: #5cffab55; color: #b7ffd9; }
+    .title { font-weight: 650; font-size: 13px; margin: 0; }
+    .desc { margin: 6px 0 0 0; font-size: 12px; color: #b8c3d6; line-height: 1.35; }
+    .right-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 12px; }
+    .right-header h2 { margin: 0; font-size: 14px; }
+    pre {
+      margin: 0; white-space: pre-wrap; word-break: break-word;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 12px; line-height: 1.45;
+      color: #e8edf5;
+    }
+    .status { font-size: 12px; color: #9aa7bd; }
+    .split { display: grid; gap: 12px; }
+    .danger { color: #ffb0b0; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>AIOSOS Prototype</h1>
+  <span class="pill">Fast model → checklist</span>
+  <span class="pill">Smart model → deep dive</span>
+  <span class="pill">Ollama: localhost:11434</span>
+</header>
+
+<main>
+  <aside>
+    <div class="card">
+      <div class="row">
+        <div>
+          <label>Your name</label>
+          <input id="personName" placeholder="Varun" />
+        </div>
+        <div>
+          <label>Company title</label>
+          <input id="companyTitle" placeholder="Founder" />
+        </div>
+      </div>
+
+      <div style="height:10px"></div>
+
+      <label>Company name</label>
+      <input id="companyName" placeholder="HallHop" />
+
+      <div style="height:10px"></div>
+
+      <label>Short description</label>
+      <textarea id="shortDesc" placeholder="A hall pass system for schools"></textarea>
+
+      <div style="height:10px"></div>
+
+      <label>Long description (optional)</label>
+      <textarea id="longDesc" placeholder="Chrome extension + backend that manages passes, logs, and safety."></textarea>
+
+      <div style="height:10px"></div>
+
+      <div class="row">
+        <div>
+          <label>Fast model (checklist)</label>
+          <select id="fastModel">
+            <option value="mistral:7b-instruct">mistral:7b-instruct (recommended)</option>
+            <option value="llama3.1:8b">llama3.1:8b</option>
+            <option value="deepseek-r1:8b">deepseek-r1:8b</option>
+          </select>
+        </div>
+        <div>
+          <label>Smart model (deep dive)</label>
+          <select id="smartModel">
+            <option value="llama3.1:8b">llama3.1:8b</option>
+            <option value="deepseek-r1:8b">deepseek-r1:8b</option>
+            <option value="mistral:7b-instruct">mistral:7b-instruct</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="height:12px"></div>
+
+      <button id="btnGenerate">Generate checklist</button>
+      <div class="muted" style="margin-top:8px">
+        Tip: if Llama 3.1 is slow on your machine, keep the fast model on Mistral.
+      </div>
+
+      <div id="genStatus" class="status" style="margin-top:10px"></div>
+    </div>
+
+    <div style="height:12px"></div>
+
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+        <div>
+          <div class="title" style="font-size:13px;">Checklist</div>
+          <div class="muted">Click an item for a deep dive.</div>
+        </div>
+        <button id="btnClear" style="padding:8px 10px;">Clear</button>
+      </div>
+
+      <div id="list" class="list"></div>
+      <div id="listEmpty" class="muted" style="margin-top:10px;">No checklist yet.</div>
+    </div>
+  </aside>
+
+  <section>
+    <div class="card split">
+      <div class="right-header">
+        <h2 id="deepTitle">Deep dive</h2>
+        <div style="display:flex; gap:10px; align-items:center;">
+          <span id="deepStatus" class="status"></span>
+          <button id="btnDeepDive" disabled>Deep dive selected step</button>
+        </div>
+      </div>
+
+      <div class="muted">
+        The deep dive uses the “smart model” and can be slower. It generates a playbook, sub-tasks, pitfalls, and a concrete next action.
+      </div>
+
+      <div class="card" style="background:#0b0d12;">
+        <pre id="deepOutput" class="muted">Select a checklist item, then click “Deep dive selected step”.</pre>
+      </div>
+
+      <div class="muted danger" id="errorBox" style="display:none;"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+  const OLLAMA_CHAT_URL = "http://localhost:11434/api/chat";
+
+  // App state
+  let checklist = []; // [{step_id,title,priority,details,success_criteria,estimated_minutes}]
+  let selectedStepId = null;
+
+  const els = {
+    personName: document.getElementById("personName"),
+    companyName: document.getElementById("companyName"),
+    companyTitle: document.getElementById("companyTitle"),
+    shortDesc: document.getElementById("shortDesc"),
+    longDesc: document.getElementById("longDesc"),
+    fastModel: document.getElementById("fastModel"),
+    smartModel: document.getElementById("smartModel"),
+    btnGenerate: document.getElementById("btnGenerate"),
+    btnDeepDive: document.getElementById("btnDeepDive"),
+    btnClear: document.getElementById("btnClear"),
+    list: document.getElementById("list"),
+    listEmpty: document.getElementById("listEmpty"),
+    genStatus: document.getElementById("genStatus"),
+    deepStatus: document.getElementById("deepStatus"),
+    deepTitle: document.getElementById("deepTitle"),
+    deepOutput: document.getElementById("deepOutput"),
+    errorBox: document.getElementById("errorBox")
+  };
+
+  function showError(msg) {
+    els.errorBox.style.display = "block";
+    els.errorBox.textContent = msg;
+  }
+  function clearError() {
+    els.errorBox.style.display = "none";
+    els.errorBox.textContent = "";
+  }
+
+  function setBusy(which, busy, text="") {
+    if (which === "gen") {
+      els.btnGenerate.disabled = busy;
+      els.genStatus.textContent = text || (busy ? "Generating checklist..." : "");
+    } else if (which === "deep") {
+      els.btnDeepDive.disabled = busy || !selectedStepId;
+      els.deepStatus.textContent = text || (busy ? "Generating deep dive..." : "");
+    }
+  }
+
+  function badgeClass(priority) {
+    const p = (priority || "medium").toLowerCase();
+    if (p === "high") return "badge high";
+    if (p === "low") return "badge low";
+    return "badge medium";
+  }
+
+  function renderChecklist() {
+    els.list.innerHTML = "";
+    els.listEmpty.style.display = checklist.length ? "none" : "block";
+
+    checklist.forEach(step => {
+      const div = document.createElement("div");
+      div.className = "item" + (step.step_id === selectedStepId ? " active" : "");
+      div.onclick = () => {
+        selectedStepId = step.step_id;
+        els.deepTitle.textContent = `Deep dive: ${step.title}`;
+        els.deepOutput.textContent = "Click “Deep dive selected step” to generate an in-depth playbook.";
+        setBusy("deep", false);
+        renderChecklist();
+      };
+
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.style.marginTop = "3px";
+      // For demo: checkbox not persisted; you can wire this to DB later.
+      cb.onclick = (e) => e.stopPropagation();
+
+      const mid = document.createElement("div");
+      const t = document.createElement("p");
+      t.className = "title";
+      t.textContent = step.title;
+
+      const d = document.createElement("p");
+      d.className = "desc";
+      d.textContent = step.details;
+
+      mid.appendChild(t);
+      mid.appendChild(d);
+
+      const right = document.createElement("div");
+      right.style.display = "grid";
+      right.style.gap = "6px";
+      right.style.justifyItems = "end";
+      right.style.marginTop = "1px";
+
+      const badge = document.createElement("span");
+      badge.className = badgeClass(step.priority);
+      badge.textContent = (step.priority || "medium").toUpperCase();
+
+      const mins = document.createElement("span");
+      mins.className = "muted";
+      mins.textContent = `${step.estimated_minutes || 30}m`;
+
+      right.appendChild(badge);
+      right.appendChild(mins);
+
+      div.appendChild(cb);
+      div.appendChild(mid);
+      div.appendChild(right);
+
+      els.list.appendChild(div);
+    });
+
+    els.btnDeepDive.disabled = !selectedStepId;
+  }
+
+  async function ollamaChat({ model, messages, format, options }) {
+    const payload = {
+      model,
+      stream: false,
+      messages,
+      options: options || { temperature: 0 },
+    };
+    if (format) payload.format = format;
+
+    const res = await fetch(OLLAMA_CHAT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Ollama error (${res.status}): ${text}`);
+    }
+
+    const json = await res.json();
+    const content = json?.message?.content;
+    if (!content) throw new Error("No content returned by Ollama.");
+    return content;
+  }
+
+  // Schema for the fast checklist output
+  const CHECKLIST_SCHEMA = {
+    type: "object",
+    properties: {
+      steps: {
+        type: "array",
+        minItems: 6,
+        maxItems: 12,
+        items: {
+          type: "object",
+          properties: {
+            step_id: { type: "string" },
+            title: { type: "string" },
+            priority: { type: "string", enum: ["low", "medium", "high"] },
+            details: { type: "string" },
+            success_criteria: { type: "string" },
+            estimated_minutes: { type: "integer", minimum: 5, maximum: 240 }
+          },
+          required: ["step_id", "title", "priority", "details", "success_criteria", "estimated_minutes"]
+        }
+      }
+    },
+    required: ["steps"]
+  };
+
+  async function generateChecklist() {
+    clearError();
+    setBusy("gen", true);
+    setBusy("deep", false);
+
+    const person_name = els.personName.value.trim();
+    const company_name = els.companyName.value.trim();
+    const company_title = els.companyTitle.value.trim();
+    const short_description = els.shortDesc.value.trim();
+    const long_description = els.longDesc.value.trim();
+
+    if (!company_name || !company_title || !short_description) {
+      setBusy("gen", false);
+      showError("Please fill Company name, Company title, and Short description.");
+      return;
+    }
+
+    const model = els.fastModel.value;
+
+    const prompt =
+`You are generating an execution checklist for a new company.
+
+Return ONLY valid JSON matching the schema.
+
+Context:
+Person: ${person_name || "(not provided)"}
+Company: ${company_name}
+Title: ${company_title}
+Short description: ${short_description}
+Long description: ${long_description || "(none)"}
+
+Task:
+Generate 8–10 steps. Each step must be specific and immediately actionable.
+Keep details concise (1–2 sentences).
+`;
+
+    try {
+      const content = await ollamaChat({
+        model,
+        messages: [
+          { role: "system", content: "Return only valid JSON. No markdown. No extra keys." },
+          { role: "user", content: prompt }
+        ],
+        format: CHECKLIST_SCHEMA,
+        options: { temperature: 0, num_predict: 700 }
+      });
+
+      let parsed;
+      try { parsed = JSON.parse(content); }
+      catch { throw new Error("Model returned non-JSON. Try a different fast model (Mistral)."); }
+
+      checklist = Array.isArray(parsed.steps) ? parsed.steps : [];
+      if (!checklist.length) throw new Error("Checklist empty.");
+
+      selectedStepId = checklist[0].step_id;
+      els.deepTitle.textContent = `Deep dive: ${checklist[0].title}`;
+      els.deepOutput.textContent = "Click “Deep dive selected step” to generate an in-depth playbook.";
+      renderChecklist();
+
+      setBusy("gen", false, `Generated ${checklist.length} steps with ${model}`);
+      setBusy("deep", false);
+    } catch (err) {
+      setBusy("gen", false);
+      showError(err.message || String(err));
+    }
+  }
+
+  // Deep dive schema: a structured playbook per step
+  const DEEP_DIVE_SCHEMA = {
+    type: "object",
+    properties: {
+      step_id: { type: "string" },
+      summary: { type: "string" },
+      why_it_matters: { type: "string" },
+      prerequisites: { type: "array", items: { type: "string" }, maxItems: 8 },
+      sub_tasks: {
+        type: "array",
+        minItems: 4,
+        maxItems: 12,
+        items: {
+          type: "object",
+          properties: {
+            title: { type: "string" },
+            owner: { type: "string" },
+            acceptance_criteria: { type: "string" },
+            estimated_minutes: { type: "integer", minimum: 5, maximum: 240 }
+          },
+          required: ["title", "acceptance_criteria", "estimated_minutes"]
+        }
+      },
+      pitfalls: { type: "array", items: { type: "string" }, maxItems: 8 },
+      questions_to_answer: { type: "array", items: { type: "string" }, maxItems: 8 },
+      next_action: { type: "string" }
+    },
+    required: ["step_id", "summary", "sub_tasks", "pitfalls", "next_action"]
+  };
+
+  async function deepDiveSelectedStep() {
+    clearError();
+    if (!selectedStepId) return;
+
+    setBusy("deep", true);
+
+    const model = els.smartModel.value;
+
+    const step = checklist.find(s => s.step_id === selectedStepId);
+    if (!step) {
+      setBusy("deep", false);
+      showError("Selected step not found.");
+      return;
+    }
+
+    const context = {
+      person_name: els.personName.value.trim() || "(not provided)",
+      company_name: els.companyName.value.trim(),
+      company_title: els.companyTitle.value.trim(),
+      short_description: els.shortDesc.value.trim(),
+      long_description: els.longDesc.value.trim() || "(none)",
+    };
+
+    const prompt =
+`Return ONLY valid JSON matching the schema.
+
+Company context:
+Person: ${context.person_name}
+Company: ${context.company_name}
+Title: ${context.company_title}
+Short: ${context.short_description}
+Long: ${context.long_description}
+
+Selected checklist step:
+step_id: ${step.step_id}
+title: ${step.title}
+priority: ${step.priority}
+details: ${step.details}
+success_criteria: ${step.success_criteria}
+
+Task:
+Create a detailed playbook to complete this step well:
+- prerequisites
+- sub-tasks (4–12) with acceptance criteria
+- pitfalls
+- questions to answer
+- one concrete "next_action" the user should do immediately.
+`;
+
+    try {
+      const content = await ollamaChat({
+        model,
+        messages: [
+          { role: "system", content: "Return only valid JSON. No markdown. No extra keys." },
+          { role: "user", content: prompt }
+        ],
+        format: DEEP_DIVE_SCHEMA,
+        options: { temperature: 0, num_predict: 900 }
+      });
+
+      let parsed;
+      try { parsed = JSON.parse(content); }
+      catch { throw new Error("Model returned non-JSON. Try Llama 3.1 for the smart model."); }
+
+      // Render a readable view (still based on structured data)
+      const lines = [];
+      lines.push(`${parsed.summary || ""}`.trim());
+      lines.push("");
+      if (parsed.why_it_matters) {
+        lines.push("Why it matters:");
+        lines.push(`- ${parsed.why_it_matters}`);
+        lines.push("");
+      }
+      if (Array.isArray(parsed.prerequisites) && parsed.prerequisites.length) {
+        lines.push("Prerequisites:");
+        parsed.prerequisites.forEach(x => lines.push(`- ${x}`));
+        lines.push("");
+      }
+      lines.push("Sub-tasks:");
+      (parsed.sub_tasks || []).forEach((t, i) => {
+        lines.push(`${i + 1}. ${t.title || "Task"}`);
+        lines.push(`   - Acceptance: ${t.acceptance_criteria || ""}`);
+        lines.push(`   - Time: ${t.estimated_minutes ?? ""} min`);
+      });
+      lines.push("");
+      if (Array.isArray(parsed.pitfalls) && parsed.pitfalls.length) {
+        lines.push("Pitfalls:");
+        parsed.pitfalls.forEach(x => lines.push(`- ${x}`));
+        lines.push("");
+      }
+      if (Array.isArray(parsed.questions_to_answer) && parsed.questions_to_answer.length) {
+        lines.push("Questions to answer:");
+        parsed.questions_to_answer.forEach(x => lines.push(`- ${x}`));
+        lines.push("");
+      }
+      lines.push("Next action:");
+      lines.push(`- ${parsed.next_action || ""}`);
+
+      els.deepOutput.textContent = lines.join("\n");
+      setBusy("deep", false, `Deep dive generated with ${model}`);
+    } catch (err) {
+      setBusy("deep", false);
+      showError(err.message || String(err));
+    }
+  }
+
+  function clearAll() {
+    checklist = [];
+    selectedStepId = null;
+    els.genStatus.textContent = "";
+    els.deepStatus.textContent = "";
+    els.deepTitle.textContent = "Deep dive";
+    els.deepOutput.textContent = "Select a checklist item, then click “Deep dive selected step”.";
+    renderChecklist();
+    clearError();
+  }
+
+  els.btnGenerate.addEventListener("click", generateChecklist);
+  els.btnDeepDive.addEventListener("click", deepDiveSelectedStep);
+  els.btnClear.addEventListener("click", clearAll);
+
+  // Initialize
+  renderChecklist();
+</script>
+</body>
+</html>
